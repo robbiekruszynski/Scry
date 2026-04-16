@@ -3,8 +3,11 @@
 import * as React from "react";
 
 import { ModeToggle } from "@/components/mode-toggle";
+import { CurveTab } from "@/components/scry/curve-tab";
+import { HandTab } from "@/components/scry/hand-tab";
 import { ImportTab } from "@/components/scry/import-tab";
 import { OverviewTab } from "@/components/scry/overview-tab";
+import { ProbabilitiesTab } from "@/components/scry/probabilities-tab";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -66,36 +69,55 @@ export function ScryApp() {
             </TabsContent>
 
             <TabsContent value="hand" className="m-0">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Opening hand</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Hand simulator will live here.
-                </CardContent>
-              </Card>
+              {deck ? (
+                <HandTab deck={deck} />
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Opening hand</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">
+                    Import a deck to simulate opening hands.
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="curve" className="m-0">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Mana curve & distributions</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Curve/type/color charts will render here.
-                </CardContent>
-              </Card>
+              {deck ? (
+                <CurveTab deck={deck} />
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Mana curve & distributions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">
+                    Import a deck to generate charts.
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="probabilities" className="m-0">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Probabilities</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Hypergeometric odds table will render here.
-                </CardContent>
-              </Card>
+              {deck ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Probabilities</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ProbabilitiesTab deck={deck} />
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Probabilities</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">
+                    Import a deck to calculate odds.
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="import" className="m-0">

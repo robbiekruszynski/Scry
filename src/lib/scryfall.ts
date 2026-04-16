@@ -16,6 +16,8 @@ type CacheRecord = {
 const STORAGE_KEY = "scry:scryfall-cache:v1";
 
 let memoryCache: Map<string, CacheRecord> | null = null;
+let lastRequestAt = 0;
+let throttleChain: Promise<void> = Promise.resolve();
 
 function getMemoryCache() {
   if (!memoryCache) memoryCache = new Map();
@@ -24,6 +26,28 @@ function getMemoryCache() {
 
 function normalizeKey(name: string) {
   return name.trim().toLowerCase();
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function throttleScryfallRequest() {
+  const previous = throttleChain;
+  let release = () => {};
+
+  throttleChain = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  await previous;
+  const elapsed = Date.now() - lastRequestAt;
+  const waitFor = Math.max(0, 100 - elapsed);
+  if (waitFor > 0) await delay(waitFor);
+  lastRequestAt = Date.now();
+  release();
 }
 
 function readStorage(): Record<string, CacheRecord> {
@@ -61,6 +85,8 @@ export function getCachedCardByName(name: string): ScryfallCard | null {
 export async function fetchCardByNameFuzzy(name: string): Promise<ScryfallCard> {
   const cached = getCachedCardByName(name);
   if (cached) return cached;
+
+  await throttleScryfallRequest();
 
   const url = `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(
     name

@@ -10,6 +10,7 @@ import {
 } from "@/lib/scryfall";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +51,7 @@ export function ImportTab({
   onDeckChange: (next: Deck | null) => void;
 }) {
   const [text, setText] = React.useState<string>("");
+  const [commanderName, setCommanderName] = React.useState<string>("");
   const [isImporting, setIsImporting] = React.useState(false);
   const [progress, setProgress] = React.useState<{ done: number; total: number }>(
     { done: 0, total: 0 }
@@ -74,7 +76,13 @@ export function ImportTab({
     });
 
     const entries = buildEntries(cardsByRequestedName, parsed.lines);
-    return { deck: { entries }, errors: [] };
+    return {
+      deck: {
+        entries,
+        commanderName: commanderName.trim() || undefined,
+      },
+      errors: [],
+    };
   }
 
   async function onImportClick() {
@@ -100,6 +108,16 @@ export function ImportTab({
           <CardTitle>Import decklist</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="commander">Commander (optional)</Label>
+            <Input
+              id="commander"
+              placeholder="Atraxa, Praetors' Voice"
+              value={commanderName}
+              onChange={(e) => setCommanderName(e.target.value)}
+            />
+          </div>
+
           <div className="grid gap-2">
             <Label htmlFor="decklist">Decklist</Label>
             <Textarea
