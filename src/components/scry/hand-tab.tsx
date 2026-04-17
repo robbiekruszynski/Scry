@@ -166,7 +166,8 @@ export function HandTab({
               {hand.map((card, idx) => (
                 <div
                   key={`${card.id}-meta-${idx}`}
-                  className="rounded-lg border bg-muted/30 px-3 py-2"
+                  className="cursor-default rounded-lg border bg-muted/30 px-3 py-2 transition-colors hover:bg-muted/50"
+                  onMouseEnter={() => setHoveredCard(card)}
                 >
                   <div className="truncate text-sm font-medium">{card.name}</div>
                   <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
@@ -190,7 +191,7 @@ export function HandTab({
                 />
               ) : (
                 <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
-                  Hover a card to preview
+                  Hover a card in the spread or a detail panel below
                 </div>
               )}
               <div className="mt-2 text-sm">
