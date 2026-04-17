@@ -52,7 +52,11 @@ export function colorIdentityViolations(deck: Deck) {
     .map((e) => e.card.name);
 }
 
-export type HealthWarning = { level: "warn" | "info"; text: string };
+/** concern = worth reviewing or updating; positive = strength; neutral = context */
+export type HealthWarning = {
+  tone: "concern" | "positive" | "neutral";
+  text: string;
+};
 
 type BenchmarkProfile = {
   id: "precon" | "upgraded_precon" | "local_tournament" | "cedh";
@@ -197,13 +201,13 @@ export function deckHealthWarnings(deck: Deck): HealthWarning[] {
   const warnings: HealthWarning[] = [];
   if (s.totalCards !== 100) {
     warnings.push({
-      level: "warn",
+      tone: "concern",
       text: `Deck size is ${s.totalCards}; Commander decks are usually 100 cards.`,
     });
   }
   if (s.totalCards === 100) {
     warnings.push({
-      level: "info",
+      tone: "positive",
       text: "Deck size is on target for Commander (100 cards).",
     });
   }
@@ -212,7 +216,7 @@ export function deckHealthWarnings(deck: Deck): HealthWarning[] {
   if (!bestFit) return warnings;
 
   warnings.push({
-    level: "info",
+    tone: "neutral",
     text: `Closest benchmark profile: ${bestFit.label} (${Math.round(
       bestFit.score * 100
     )}% structural match).`,
@@ -220,121 +224,121 @@ export function deckHealthWarnings(deck: Deck): HealthWarning[] {
 
   if (bestFit.deltas.lands < -2) {
     warnings.push({
-      level: "info",
+      tone: "concern",
       text: `Land count is below ${bestFit.label} by ${Math.abs(
         Math.round(bestFit.deltas.lands)
       )}. Consider +1 to +3 lands for smoother opening turns.`,
     });
   } else if (bestFit.deltas.lands > 3) {
     warnings.push({
-      level: "info",
+      tone: "concern",
       text: `Land count is above ${bestFit.label} by ${Math.round(
         bestFit.deltas.lands
       )}. You can test trimming 1-2 lands for more action slots.`,
     });
   } else {
     warnings.push({
-      level: "info",
+      tone: "positive",
       text: "Land count is in a stable range for this benchmark.",
     });
   }
 
   if (bestFit.deltas.ramp < -2) {
     warnings.push({
-      level: "info",
+      tone: "concern",
       text: `Ramp is below ${bestFit.label} by ${Math.abs(
         Math.round(bestFit.deltas.ramp)
       )}. Add low-CMC ramp (1-2 mana rocks / land ramp) for faster development.`,
     });
   } else if (bestFit.deltas.ramp > 3) {
     warnings.push({
-      level: "info",
+      tone: "concern",
       text: "Ramp density is high; this is good for speed but can reduce threat density if overdone.",
     });
   } else {
     warnings.push({
-      level: "info",
+      tone: "positive",
       text: "Ramp density is close to target.",
     });
   }
   if (bestFit.deltas.interaction < -2) {
     warnings.push({
-      level: "info",
+      tone: "concern",
       text: `Interaction is below ${bestFit.label} baseline by ${Math.abs(
         Math.round(bestFit.deltas.interaction)
       )}. Consider adding flexible removal/counter slots.`,
     });
   } else {
     warnings.push({
-      level: "info",
+      tone: "positive",
       text: "Interaction density is in a healthy range for this profile.",
     });
   }
   if (bestFit.deltas.avgCmc > 0.35) {
     warnings.push({
-      level: "info",
+      tone: "concern",
       text: `Average CMC is above ${bestFit.label} baseline by ${bestFit.deltas.avgCmc.toFixed(
         2
       )}. Trim high-end spells or add more low-cost setup pieces.`,
     });
   } else if (bestFit.deltas.avgCmc < -0.45) {
     warnings.push({
-      level: "info",
+      tone: "concern",
       text: "Average CMC is very lean; make sure you still have enough late-game closers.",
     });
   } else {
     warnings.push({
-      level: "info",
+      tone: "positive",
       text: "Curve looks aligned with this benchmark.",
     });
   }
   if (bestFit.deltas.fastMana < -3) {
     warnings.push({
-      level: "info",
+      tone: "concern",
       text: `Fast mana is below ${bestFit.label} baseline by ${Math.abs(
         Math.round(bestFit.deltas.fastMana)
       )}. Upgrade with efficient accelerants if targeting faster pods.`,
     });
   } else if (p.fastManaCount >= bestFit.targets.fastMana) {
     warnings.push({
-      level: "info",
+      tone: "positive",
       text: "Fast mana package is keeping pace with this benchmark.",
     });
   }
   if (bestFit.deltas.tutors < -2) {
     warnings.push({
-      level: "info",
+      tone: "concern",
       text: `Tutor density is below ${bestFit.label} baseline by ${Math.abs(
         Math.round(bestFit.deltas.tutors)
       )}. Add tutor redundancy if consistency is a priority.`,
     });
   } else if (p.tutorCount >= bestFit.targets.tutors) {
     warnings.push({
-      level: "info",
+      tone: "positive",
       text: "Tutor density supports consistent game plans.",
     });
   }
   if (bestFit.deltas.efficientInteraction < -2) {
     warnings.push({
-      level: "info",
+      tone: "concern",
       text: `Low-cost interaction is below ${bestFit.label} baseline by ${Math.abs(
         Math.round(bestFit.deltas.efficientInteraction)
       )}. Prioritize 1-2 mana answers for faster tables.`,
     });
   } else if (p.efficientInteractionCount >= bestFit.targets.efficientInteraction) {
     warnings.push({
-      level: "info",
+      tone: "positive",
       text: "Low-cost interaction suite is strong for stack/tempo fights.",
     });
   }
   if (p.winconCount < 2) {
     warnings.push({
-      level: "info",
+      tone: "concern",
       text: "Win condition density looks low; consider adding redundant closes.",
     });
   } else {
     warnings.push({
-      level: "info",
+      tone: "positive",
       text: "Win condition density looks sufficient for closing games.",
     });
   }

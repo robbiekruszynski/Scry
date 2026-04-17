@@ -184,14 +184,153 @@ async function fetchCardPayload(url: string): Promise<{
   };
 }
 
+const COLLECTION_CHUNK = 75;
+
+export type ImportProgress = {
+  done: number;
+  total: number;
+  /** Short status for the loading panel */
+  detail: string;
+};
+
+/**
+ * Resolves unique card names for deck import: cache hits, then Scryfall collection
+ * (up to 75 names per HTTP request), then fuzzy lookup for any collection misses.
+ */
+export async function resolveNamesForDeckImport(
+  uniqueNames: string[],
+  onProgress?: (p: ImportProgress) => void
+): Promise<Map<string, ScryfallCard>> {
+  const out = new Map<string, ScryfallCard>();
+  const total = uniqueNames.length;
+  let done = 0;
+
+  const report = (detail: string) => {
+    onProgress?.({ done, total, detail });
+  };
+
+  const uncached: string[] = [];
+  let cacheHits = 0;
+  for (const name of uniqueNames) {
+    const hit = getCachedCardByName(name);
+    if (hit) {
+      out.set(name, hit);
+      done += 1;
+      cacheHits += 1;
+    } else {
+      uncached.push(name);
+    }
+  }
+  if (cacheHits > 0) {
+    report(`Loaded ${cacheHits} unique name(s) from cache`);
+  }
+
+  if (uncached.length === 0) {
+    report("All cards loaded from cache.");
+    return out;
+  }
+
+  const useProxy = typeof window !== "undefined";
+  const collectionUrl = useProxy
+    ? "/api/scryfall/collection"
+    : null;
+
+  const stillNeedFuzzy: string[] = [];
+
+  if (collectionUrl) {
+    for (let i = 0; i < uncached.length; i += COLLECTION_CHUNK) {
+      const chunk = uncached.slice(i, i + COLLECTION_CHUNK);
+      const batchNum = Math.floor(i / COLLECTION_CHUNK) + 1;
+      const batchTotal = Math.ceil(uncached.length / COLLECTION_CHUNK);
+      report(`Bulk lookup batch ${batchNum}/${batchTotal} (${chunk.length} cards)…`);
+
+      const res = await fetch(collectionUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ names: chunk }),
+        cache: "no-store",
+      });
+      const raw = await res.text();
+
+      if (!res.ok) {
+        chunk.forEach((n) => stillNeedFuzzy.push(n));
+        report(`Batch ${batchNum} failed (${res.status}); will try individual lookup…`);
+        continue;
+      }
+
+      let json: {
+        data?: unknown[];
+        not_found?: { name?: string }[];
+      };
+      try {
+        json = JSON.parse(raw) as typeof json;
+      } catch {
+        chunk.forEach((n) => stillNeedFuzzy.push(n));
+        continue;
+      }
+
+      const byNorm = new Map<string, ScryfallCard>();
+      for (const row of json.data ?? []) {
+        const card = cardFromScryfallJson(row);
+        byNorm.set(normalizeKey(card.name), card);
+      }
+
+      const notFoundSet = new Set(
+        (json.not_found ?? [])
+          .map((nf) => {
+            const n = nf && typeof nf === "object" && "name" in nf ? (nf as { name?: string }).name : undefined;
+            return n ? normalizeKey(n) : "";
+          })
+          .filter(Boolean)
+      );
+
+      let matchedInChunk = 0;
+      for (const requested of chunk) {
+        const key = normalizeKey(requested);
+        if (notFoundSet.has(key)) {
+          stillNeedFuzzy.push(requested);
+          continue;
+        }
+        const card = byNorm.get(key);
+        if (card) {
+          persistCache(requested, card);
+          out.set(requested, card);
+          done += 1;
+          matchedInChunk += 1;
+        } else {
+          stillNeedFuzzy.push(requested);
+        }
+      }
+      report(
+        `Batch ${batchNum}/${batchTotal}: matched ${matchedInChunk}/${chunk.length} (${done}/${total} done)`
+      );
+    }
+  } else {
+    stillNeedFuzzy.push(...uncached);
+  }
+
+  for (const name of stillNeedFuzzy) {
+    report(`Looking up: ${name}…`);
+    const card = await fetchCardByNameFuzzy(name);
+    out.set(name, card);
+    done += 1;
+    report(`Resolved: ${name}`);
+  }
+
+  report("Import data ready.");
+  return out;
+}
+
 export async function fetchCardByNameFuzzy(name: string): Promise<ScryfallCard> {
   const cached = getCachedCardByName(name);
   if (cached) return cached;
 
   return enqueueScryfall(async () => {
-    await delay(MIN_MS_BETWEEN_SCRYFALL_REQUESTS);
-
     const useProxy = typeof window !== "undefined";
+    if (!useProxy) {
+      await delay(MIN_MS_BETWEEN_SCRYFALL_REQUESTS);
+    }
+
     const url = useProxy
       ? `/api/scryfall/card?fuzzy=${encodeURIComponent(name)}`
       : `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`;
@@ -204,7 +343,9 @@ export async function fetchCardByNameFuzzy(name: string): Promise<ScryfallCard> 
         60_000
       );
       await delay(retryMs);
-      await delay(MIN_MS_BETWEEN_SCRYFALL_REQUESTS);
+      if (!useProxy) {
+        await delay(MIN_MS_BETWEEN_SCRYFALL_REQUESTS);
+      }
       payload = await fetchCardPayload(url);
     }
 
@@ -242,7 +383,9 @@ export async function fetchCardById(cardId: string): Promise<ScryfallCard> {
     : `https://api.scryfall.com/cards/${encodeURIComponent(cardId)}`;
 
   return enqueueScryfall(async () => {
-    await delay(MIN_MS_BETWEEN_SCRYFALL_REQUESTS);
+    if (!useProxy) {
+      await delay(MIN_MS_BETWEEN_SCRYFALL_REQUESTS);
+    }
     let payload = await fetchCardPayload(url);
     if (payload.status === 429) {
       const retryMs = Math.max(
@@ -250,7 +393,9 @@ export async function fetchCardById(cardId: string): Promise<ScryfallCard> {
         60_000
       );
       await delay(retryMs);
-      await delay(MIN_MS_BETWEEN_SCRYFALL_REQUESTS);
+      if (!useProxy) {
+        await delay(MIN_MS_BETWEEN_SCRYFALL_REQUESTS);
+      }
       payload = await fetchCardPayload(url);
     }
     if (!payload.ok) {

@@ -211,9 +211,11 @@ export function OverviewTab({
                 <div
                   key={`${w.text}-${idx}`}
                   className={
-                    w.level === "warn"
-                      ? "rounded border border-destructive/50 bg-destructive/10 px-2 py-1"
-                      : "rounded border border-border px-2 py-1 text-muted-foreground"
+                    w.tone === "concern"
+                      ? "rounded border border-red-500/45 bg-red-500/10 px-2 py-1.5 text-foreground shadow-[inset_3px_0_0_0_rgba(239,68,68,0.75)] dark:bg-red-950/35"
+                      : w.tone === "positive"
+                        ? "rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-1.5 text-foreground shadow-[inset_3px_0_0_0_rgba(34,197,94,0.75)] dark:bg-emerald-950/30"
+                        : "rounded border border-border/80 bg-muted/25 px-2 py-1.5 text-muted-foreground"
                   }
                 >
                   {w.text}

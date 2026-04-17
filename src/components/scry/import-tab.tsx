@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { flushSync } from "react-dom";
+import { Loader2 } from "lucide-react";
 
 import {
   buildEntries,
@@ -8,11 +10,7 @@ import {
   type Deck,
   type DeckArchetype,
 } from "@/lib/deck";
-import {
-  fetchCardByNameFuzzy,
-  getCachedCardByName,
-  type ScryfallCard,
-} from "@/lib/scryfall";
+import { resolveNamesForDeckImport, type ScryfallCard } from "@/lib/scryfall";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,12 +37,26 @@ export function ImportTab({
   const [progress, setProgress] = React.useState<{ done: number; total: number }>(
     { done: 0, total: 0 }
   );
+  const [importDetail, setImportDetail] = React.useState<string>("");
+  const importStartedAt = React.useRef<number>(0);
   const [errors, setErrors] = React.useState<string[]>([]);
   const [copyStatus, setCopyStatus] = React.useState<"idle" | "copied" | "error">(
     "idle"
   );
   const progressPercent =
     progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+
+  const etaSeconds =
+    progress.done > 0 && progress.total > 0 && progress.done < progress.total
+      ? Math.max(
+          0,
+          Math.round(
+            ((Date.now() - importStartedAt.current) / progress.done) *
+              (progress.total - progress.done) /
+              1000
+          )
+        )
+      : null;
 
   React.useEffect(() => {
     try {
@@ -79,20 +91,22 @@ export function ImportTab({
     if (commanderInput) namesToResolve.push(commanderInput);
 
     const uniqueNames = Array.from(new Set(namesToResolve));
-    setProgress({ done: 0, total: uniqueNames.length });
+    importStartedAt.current = Date.now();
+    flushSync(() => {
+      setProgress({ done: 0, total: uniqueNames.length });
+      setImportDetail("Starting…");
+    });
 
     const cardsByRequestedName = new Map<string, ScryfallCard>();
-
-    let done = 0;
+    const resolved = await resolveNamesForDeckImport(uniqueNames, (p) => {
+      flushSync(() => {
+        setProgress({ done: p.done, total: p.total });
+        setImportDetail(p.detail);
+      });
+    });
     for (const name of uniqueNames) {
-      const cached = getCachedCardByName(name);
-      const card = cached ?? (await fetchCardByNameFuzzy(name));
-      cardsByRequestedName.set(name, card);
-      done += 1;
-      setProgress({ done, total: uniqueNames.length });
-      if (done % 3 === 0) {
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      }
+      const card = resolved.get(name);
+      if (card) cardsByRequestedName.set(name, card);
     }
 
     const { entries, missingNames } = buildEntries(cardsByRequestedName, parsed.lines);
@@ -244,26 +258,55 @@ export function ImportTab({
           </div>
 
           {isImporting ? (
-            <div className="rounded-lg border bg-muted/20 p-3">
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="font-medium">Import in progress</span>
-                <span className="text-muted-foreground">{progressPercent}%</span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded bg-muted">
-                <div
-                  className="h-2 rounded bg-primary transition-all duration-300"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                <span>
-                  Fetching card data from Scryfall: {progress.done}/{progress.total}
-                </span>
-                <span>Please keep this tab open</span>
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                First import can take a while. If refreshed, cached cards are reused and import will
-                resume faster.
+            <div
+              className="relative overflow-hidden rounded-xl border-2 border-primary/35 bg-muted/30 p-4 shadow-inner ring-1 ring-primary/15 animate-in fade-in duration-300"
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <div className="pointer-events-none absolute inset-0 bg-linear-to-r from-primary/5 via-transparent to-primary/5 animate-pulse" />
+              <div className="relative space-y-3">
+                <div className="flex items-start gap-3">
+                  <Loader2
+                    className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-primary"
+                    aria-hidden
+                  />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                      <span>Resolving deck with Scryfall</span>
+                      <span className="rounded-md bg-primary/15 px-2 py-0.5 font-mono text-xs tabular-nums text-foreground">
+                        {progressPercent}%
+                      </span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      {importDetail || "Working…"}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-2.5 rounded-full bg-primary transition-[width] duration-300 ease-out"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                    <span className="tabular-nums">
+                      Progress: {progress.done}/{progress.total} unique names
+                    </span>
+                    {etaSeconds !== null ? (
+                      <span className="tabular-nums">~{etaSeconds}s remaining (estimate)</span>
+                    ) : (
+                      <span>Keep this tab open</span>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-dashed border-primary/25 bg-background/60 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                  <span className="font-medium text-foreground">Why it can take a minute: </span>
+                  Scryfall is queried in small batches (rate limits). The app now uses bulk lookups
+                  where possible; the first full import still needs network time. Re-imports reuse
+                  your browser cache and are much faster.
+                </div>
               </div>
             </div>
           ) : null}
